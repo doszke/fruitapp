@@ -15,5 +15,4 @@ object RestTemplateProvider {
         return restTemplate
     }
 
-
 }

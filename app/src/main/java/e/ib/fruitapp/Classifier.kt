@@ -3,10 +3,6 @@ package e.ib.fruitapp
 import android.content.Context
 import android.content.res.AssetManager
 import android.graphics.Bitmap
-import android.os.SystemClock
-import android.util.Log
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.Tasks.call
 import org.tensorflow.lite.Interpreter
 import java.io.FileInputStream
 import java.io.IOException
@@ -16,14 +12,21 @@ import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.util.*
-import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.collections.ArrayList
 
 class Classifier(private val context: Context) {
 
-    private var interpreter: Interpreter? = null
+    companion object {
+        private const val FLOAT_TYPE_SIZE = 4
+        private const val CHANNEL_SIZE = 3
+        private const val IMAGE_MEAN = 127.5f
+        private const val IMAGE_STD = 127.5f
+    }
+
+
+    private var tflite: Interpreter? = null
     var isInitialized = false
         private set
 
@@ -50,7 +53,7 @@ class Classifier(private val context: Context) {
         inputImageHeight = inputShape[2]
         modelInputSize = FLOAT_TYPE_SIZE * inputImageWidth * inputImageHeight * CHANNEL_SIZE
 
-        this.interpreter = interpreter
+        this.tflite = interpreter
 
         isInitialized = true
     }
@@ -76,12 +79,12 @@ class Classifier(private val context: Context) {
         return labels
     }
 
-    private fun getMaxResult(result: FloatArray): Int {
-        var probability = result[0]
+    private fun getPrediction(result: FloatArray): Int {
+        var score = result[0]
         var index = 0
         for (i in result.indices) {
-            if (probability < result[i]) {
-                probability = result[i]
+            if (score < result[i]) {
+                score = result[i]
                 index = i
             }
         }
@@ -89,41 +92,17 @@ class Classifier(private val context: Context) {
     }
 
 
-    fun classify(bitmap: Bitmap): String {
-
+    fun predict(bitmap: Bitmap): String {
         if (!isInitialized) {
             initializeInterpreter()
         }
-        val resizedImage =
-            Bitmap.createScaledBitmap(bitmap, inputImageWidth, inputImageHeight, true)
-
+        val resizedImage = Bitmap.createScaledBitmap(bitmap, inputImageWidth, inputImageHeight, true)
         val byteBuffer = convertBitmapToByteBuffer(resizedImage)
-
         val output = Array(1) { FloatArray(labels.size) }
-        val startTime = SystemClock.uptimeMillis()
-        interpreter?.run(byteBuffer, output)
-        val endTime = SystemClock.uptimeMillis()
-
-        var inferenceTime = endTime - startTime
-        var index = getMaxResult(output[0])
+        tflite?.run(byteBuffer, output)
+        val index = getPrediction(output[0])
 
         return labels[index]
-    }
-
-    fun classifyAsync(bitmap: Bitmap): Task<String> {
-        return call(executorService, Callable<String> { classify(bitmap) })
-    }
-
-    fun close() {
-        call(
-            executorService,
-            Callable<String> {
-                interpreter?.close()
-
-                Log.d(TAG, "Closed TFLite interpreter.")
-                null
-            }
-        )
     }
 
     private fun convertBitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
@@ -136,11 +115,9 @@ class Classifier(private val context: Context) {
         for (i in 0 until inputImageWidth) {
             for (j in 0 until inputImageHeight) {
                 val pixelVal = pixels[pixel++]
-
                 byteBuffer.putFloat(((pixelVal shr 16 and 0xFF) - IMAGE_MEAN) / IMAGE_STD)
                 byteBuffer.putFloat(((pixelVal shr 8 and 0xFF) - IMAGE_MEAN) / IMAGE_STD)
                 byteBuffer.putFloat(((pixelVal and 0xFF) - IMAGE_MEAN) / IMAGE_STD)
-
             }
         }
         bitmap.recycle()
@@ -148,11 +125,4 @@ class Classifier(private val context: Context) {
         return byteBuffer
     }
 
-    companion object {
-        private const val TAG = "TfliteClassifier"
-        private const val FLOAT_TYPE_SIZE = 4
-        private const val CHANNEL_SIZE = 3
-        private const val IMAGE_MEAN = 127.5f
-        private const val IMAGE_STD = 127.5f
-    }
 }

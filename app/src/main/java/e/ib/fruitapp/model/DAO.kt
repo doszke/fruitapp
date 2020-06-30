@@ -1,5 +1,8 @@
 package e.ib.fruitapp.model
 
+import android.graphics.Bitmap
+import e.ib.fruitapp.Classifier
+
 data class FruitDAO(
     val genus: String?,
     val name: String?,
@@ -11,6 +14,11 @@ data class FruitDAO(
 
     override fun toString(): String {
         return "$name (values per 100 g): \n$nutritions"
+    }
+
+    fun getValues() :Array<String> {
+        return arrayOf("$name", "(values per 100 g): \n" +
+                "$nutritions")
     }
 }
 
@@ -26,3 +34,8 @@ data class NutritionsDAO(
         return "carbohydrates:\t$carbohydrates g\nprotein:\t$protein g\nfat:\t$fat g\ncalories:\t$calories kcal\nsugar:\t$sugar g"
     }
 }
+
+data class PredictionDAO(
+    val classifier: Classifier,
+    val bitmap: Bitmap
+)
